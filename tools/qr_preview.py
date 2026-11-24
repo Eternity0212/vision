@@ -8,7 +8,6 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import cv2
-from pyzbar.pyzbar import decode as zbar_decode, ZBarSymbol
 
 from config.config import CAMERA, QR, BOMB_ID, TARGET_ID, ZONE_ID
 from capture.camera import Camera
@@ -94,7 +93,6 @@ def local_ip():
 def main():
     idx = CAMERA["index_win"] if sys.platform.startswith("win") else CAMERA["index_linux"]
     min_side = QR["min_side_px"]
-    confirm = QR["confirm_frames"]
 
     with Camera(index=idx, width=CAMERA["width"], height=CAMERA["height"],
                 fps=CAMERA["fps"], warmup=CAMERA["warmup"],
@@ -105,8 +103,7 @@ def main():
         print(f"浏览器/OBS 打开： http://{local_ip()}:{PORT}/")
         print("Ctrl+C 退出")
 
-        hit = 0
-        last_text = None
+        qr = QrReader()
         locked = None
 
         try:
@@ -115,36 +112,23 @@ def main():
                 if frame is None:
                     continue
 
-                results = zbar_decode(frame, symbols=[ZBarSymbol.QRCODE])
-                for r in results:
-                    x, y, w, h = r.rect
+                code = qr.feed(frame)      # 与主程序同一套识别，含 zxing 小码兜底
+                if qr.last_box is not None:
+                    x, y, w, h = qr.last_box
                     side = min(w, h)
                     color = (0, 255, 0) if side >= min_side else (0, 200, 255)
                     cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
-                    txt = r.data.decode("ascii", "ignore").strip() if r.data else ""
-                    txt = "".join(ch for ch in txt if ch.isdigit())
-                    if txt:
-                        cv2.putText(frame, txt, (x, max(y - 8, 20)),
+                    if qr.last_text:
+                        cv2.putText(frame, qr.last_text, (x, max(y - 8, 20)),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
-                    if side < min_side or not txt:
-                        continue
-                    if not QrReader._valid(txt):
-                        hit = 0
-                        last_text = None
-                        continue
-                    if txt == last_text:
-                        hit += 1
-                    else:
-                        last_text = txt
-                        hit = 1
-                    if hit >= confirm and txt != locked:
-                        locked = txt
-                        print(f"锁定 {locked} | 排爆{BOMB_ID[int(locked[0])]}"
-                              f" | 救援{TARGET_ID[int(locked[1])]}"
-                              f" | 安置{ZONE_ID[int(locked[2])]}")
+                if code is not None and code != locked:
+                    locked = code
+                    print(f"锁定 {locked} | 排爆{BOMB_ID[int(locked[0])]}"
+                          f" | 救援{TARGET_ID[int(locked[1])]}"
+                          f" | 安置{ZONE_ID[int(locked[2])]}")
 
                 status = "未锁定" if locked is None else f"已锁定 {locked}"
-                cv2.putText(frame, f"{status}  hit:{hit}", (20, 40),
+                cv2.putText(frame, f"{status}  hit:{qr.hits}", (20, 40),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
 
                 ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, QUALITY])

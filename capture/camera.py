@@ -21,9 +21,11 @@ class Camera:
         self.cap=cv2.VideoCapture(self.index,backend)   #创建摄像头对象
         if not self.cap.isOpened(): #如果没有开好摄像头
             raise RuntimeError(f"摄像头{self.index}打开失败")
+        self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))  #该摄像头只支持MJPG，不显式指定会打开失败
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH,self.width)      #cap 采集
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT,self.height)    #prop 属性
         self.cap.set(cv2.CAP_PROP_FPS,self.target_fps)         #frame 一帧画面 意思是采集属性里一帧的宽高帧率
+        self.cap.set(cv2.CAP_PROP_BUFFERSIZE,1)                #只留一帧缓存，处理慢时不会读到几秒前的旧画面
         self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, self.auto_exposure)
         self.cap.set(cv2.CAP_PROP_AUTO_WB, self.auto_wb)
         self.cap.set(cv2.CAP_PROP_EXPOSURE, self.exposure)
