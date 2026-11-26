@@ -2,6 +2,7 @@
    用法：python3 -m tools.color_preview [auto|bomb|target|zone]（默认自动判区域）
    浏览器打开 http://<板子IP>:8001/ ，页面上可切换三组/自动、可直接在画面上框检测区域
    每个框上会显示 颜色名 / 半径 / 中心 HSV，反光时看 V 最直观"""
+import os
 import socket
 import sys
 import threading
@@ -19,8 +20,10 @@ from recognize.color import ColorFinder
 from recognize.qr import QrReader
 
 PORT = 8001
-QUALITY = 50
-PREVIEW_W, PREVIEW_H = 800, 450   #推流分辨率：识别仍在 1280x720 上做，只在压缩前缩小，省带宽防画面滞后
+QUALITY = int(os.environ.get("PV_QUALITY", "50"))    #推流 JPEG 质量，环境变量 PV_QUALITY 可覆盖
+PREVIEW_W = int(os.environ.get("PV_W", "800"))       #推流宽，PV_W 可覆盖（调焦时设 1280 看原图清晰度）
+PREVIEW_H = int(os.environ.get("PV_H", "450"))       #推流高，PV_H 可覆盖
+#推流分辨率只影响浏览器看到的画面，识别和二维码解码始终在相机原图 1280x720 上做
 
 GROUPS = {"bomb": BOMB_HSV, "target": TARGET_HSV, "zone": ZONE_HSV}
 NAMES = {"bomb": "排爆物", "target": "救援目标", "zone": "安置区", "auto": "自动"}
