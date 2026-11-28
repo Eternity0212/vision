@@ -225,7 +225,23 @@ def main():
             auto_wb=CAMERA["auto_wb"],
         ) as cam:
             while True:
-                frame = cam.read()
+                try:
+                    frame = cam.read()
+                except RuntimeError as e:  # 相机掉线：重连期间照常发心跳，别让电控超时
+                    print(f"相机异常：{e}，开始重连")
+                    cam.close()
+                    while True:
+                        if tx.send("R"):
+                            last_beat = time.time()
+                        time.sleep(0.2)
+                        try:
+                            cam.open()
+                            print("相机已重连")
+                            break
+                        except RuntimeError as err:
+                            print(f"重连失败：{err}")
+                            cam.close()  # 这次没开成，释放掉再试
+                    continue
                 if frame is None:
                     continue
 
