@@ -75,7 +75,7 @@ def pos_number(idx):
 def main():
     qr = QrReader()
     bomb_finder = ColorFinder(BOMB_HSV)     #排爆物颜色
-    target_finder = ColorFinder(TARGET_HSV) #转盘救援目标颜色
+    target_finder = ColorFinder(TARGET_HSV, allow_tall=True) #转盘救援目标：锥体细高，放宽实心度
     zone_finder = ColorFinder(ZONE_HSV)     #安置区小球颜色
     m = Measure()
     tx = Tx().open()

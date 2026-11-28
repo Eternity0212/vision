@@ -191,7 +191,8 @@ LABEL = {"红": "red", "黄": "yel", "绿": "grn", "浅蓝": "lblue", "深蓝": 
 
 def detect(frame, group):
     """检出该组里半径最大的三个目标，返回 (颜色名,cx,cy,r,填充率)"""
-    finder = ColorFinder(GROUPS[group])
+    #救援组是锥体，细高且常被夹爪/反光啃出缺口，实心度到不了 0.85，单独放宽
+    finder = ColorFinder(GROUPS[group], allow_tall=(group == "target"))
     roi = ROI_STATE.get(group)
     groups = finder.find_many(frame, finder.colors, roi=roi)   #一次 HSV 转换扫完
     cands = []

@@ -10,8 +10,9 @@ _OPEN_KERNEL_DARK=np.ones((9,9),np.uint8)   #黑色目标常和阴影/缝隙连�
 #- 面积过滤 ：太小(<800)当反光/噪点扔掉，超过半屏(>0.5)也扔掉，防误报
 #- 返回这个色块的 最小外接圆 ：圆心`(cx,cy)` + 半径
 class ColorFinder():
-    def __init__(self,palette=None):
+    def __init__(self,palette=None,allow_tall=False):
         self._hsv=BOMB_HSV if palette is None else palette   #三组阈值分开用，默认排爆组
+        self._allow_tall=allow_tall   #救援锥体细高、实心度天生低，单独放宽（球类仍走严格判据）
         self._min_area=MIN_AREA
         self._max_area_ratio=MAX_AREA_RATIO #从config传参数
     @property
@@ -65,8 +66,15 @@ class ColorFinder():
                 if area < 1.1*radius*radius:   #外接圆填充率 < 0.35
                     continue
                 hull=cv2.contourArea(cv2.convexHull(c))
-                if hull<=0 or area/hull < 0.85:   #实心度 < 0.85（凹陷太多）
+                if hull<=0:
                     continue
+                solid=area/hull
+                if solid < 0.85:                    #实心度 < 0.85（凹陷太多）
+                    #圆台/锥体：细高、被夹爪啃掉一块、底下还带反光，实心度到不了 0.85
+                    #放宽成“高度 ≥1.2 倍宽度 + 填充率 ≥0.35”，球类不满足细高条件，仍走严格判据
+                    bx,by,bw,bh=cv2.boundingRect(c)
+                    if not (self._allow_tall and bh >= 1.2*bw and area >= 1.1*radius*radius):
+                        continue
                 res.append((int(cx/s)+x1,int(cy/s)+y1,int(radius/s),area/(radius*radius)))
             res.sort(key=lambda t:t[2],reverse=True)
             out[color_name]=res
