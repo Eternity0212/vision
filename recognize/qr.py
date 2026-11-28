@@ -162,14 +162,9 @@ if __name__ == "__main__":
             # 如果存在code且code和上一次打印的不同
             if code is not None and code != last_print:  # 防止253不停刷屏
                 print(
-                    "码:",
-                    code,
-                    "| 排爆物:",
-                    BOMB_ID[int(code[0])],
-                    "| 优先救援:",
-                    TARGET_ID[int(code[1])],
-                    "| 安置区:",
-                    ZONE_ID[int(code[2])],
+                    f"码:{code} | 排爆物:{BOMB_ID[int(code[0])]} | "
+                    f"优先救援:{TARGET_ID[int(code[1])]} | "
+                    f"安置区:{ZONE_ID[int(code[2])]}"
                 )
                 last_print = code
             if headless:
