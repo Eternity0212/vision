@@ -1,7 +1,8 @@
 """颜色预览：实时框出某一组（排爆/救援/安置）里的所有颜色，方便现场量阈值
-   用法：python3 -m tools.color_preview [auto|bomb|target|zone]（默认自动判区域）
-   浏览器打开 http://<板子IP>:8001/ ，页面上可切换三组/自动、可直接在画面上框检测区域
-   每个框上会显示 颜色名 / 半径 / 中心 HSV，反光时看 V 最直观"""
+用法：python3 -m tools.color_preview [auto|bomb|target|zone]（默认自动判区域）
+浏览器打开 http://<板子IP>:8001/ ，页面上可切换三组/自动、可直接在画面上框检测区域
+每个框上会显示 颜色名 / 半径 / 中心 HSV，反光时看 V 最直观"""
+
 import os
 import socket
 import sys
@@ -12,27 +13,40 @@ from urllib.parse import urlparse, parse_qs
 
 import cv2
 
-from config.config import (CAMERA, BOMB_HSV, TARGET_HSV, ZONE_HSV,
-                           BOMB_ROI, TARGET_ROI, ZONE_ROI,
-                           BOMB_ID, TARGET_ID, ZONE_ID)
+from config.config import (
+    CAMERA,
+    BOMB_HSV,
+    TARGET_HSV,
+    ZONE_HSV,
+    BOMB_ROI,
+    TARGET_ROI,
+    ZONE_ROI,
+    BOMB_ID,
+    TARGET_ID,
+    ZONE_ID,
+)
 from capture.camera import Camera
 from recognize.color import ColorFinder
 from recognize.qr import QrReader
 
 PORT = 8001
-QUALITY = int(os.environ.get("PV_QUALITY", "50"))    #推流 JPEG 质量，环境变量 PV_QUALITY 可覆盖
-PREVIEW_W = int(os.environ.get("PV_W", "800"))       #推流宽，PV_W 可覆盖（调焦时设 1280 看原图清晰度）
-PREVIEW_H = int(os.environ.get("PV_H", "450"))       #推流高，PV_H 可覆盖
-#推流分辨率只影响浏览器看到的画面，识别和二维码解码始终在相机原图 1280x720 上做
+QUALITY = int(os.environ.get("PV_QUALITY", "50"))  # 推流 JPEG 质量，环境变量 PV_QUALITY 可覆盖
+PREVIEW_W = int(os.environ.get("PV_W", "800"))  # 推流宽，PV_W 可覆盖（调焦时设 1280 看原图清晰度）
+PREVIEW_H = int(os.environ.get("PV_H", "450"))  # 推流高，PV_H 可覆盖
+# 推流分辨率只影响浏览器看到的画面，识别和二维码解码始终在相机原图 1280x720 上做
 
 GROUPS = {"bomb": BOMB_HSV, "target": TARGET_HSV, "zone": ZONE_HSV}
 NAMES = {"bomb": "排爆物", "target": "救援目标", "zone": "安置区", "auto": "自动"}
-CURRENT = sys.argv[1] if len(sys.argv) > 1 and (sys.argv[1] in GROUPS or sys.argv[1] == "auto") else "auto"
-ROI_STATE = {"bomb": BOMB_ROI, "target": TARGET_ROI, "zone": ZONE_ROI}   #页面上框选后只改这里
-GROUP_DIGIT = {"bomb": 0, "target": 1, "zone": 2}   #二维码三位分别对应三个区
+CURRENT = (
+    sys.argv[1]
+    if len(sys.argv) > 1 and (sys.argv[1] in GROUPS or sys.argv[1] == "auto")
+    else "auto"
+)
+ROI_STATE = {"bomb": BOMB_ROI, "target": TARGET_ROI, "zone": ZONE_ROI}  # 页面上框选后只改这里
+GROUP_DIGIT = {"bomb": 0, "target": 1, "zone": 2}  # 二维码三位分别对应三个区
 GROUP_IDS = {"bomb": BOMB_ID, "target": TARGET_ID, "zone": ZONE_ID}
 
-AUTO_GROUP = "target"   #自动模式当前判定的区域
+AUTO_GROUP = "target"  # 自动模式当前判定的区域
 _auto_vote = None
 _auto_votes = 0
 
@@ -124,10 +138,12 @@ class Handler(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         q = parse_qs(u.query)
         if u.path == "/":
-            body = (PAGE.replace("__GROUP__", NAMES.get(CURRENT, CURRENT))
-                        .replace("__GROUP_KEY__", CURRENT)
-                        .replace("__SW__", str(PREVIEW_W))
-                        .replace("__SH__", str(PREVIEW_H))).encode("utf-8")
+            body = (
+                PAGE.replace("__GROUP__", NAMES.get(CURRENT, CURRENT))
+                .replace("__GROUP_KEY__", CURRENT)
+                .replace("__SW__", str(PREVIEW_W))
+                .replace("__SH__", str(PREVIEW_H))
+            ).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -186,15 +202,23 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
 
 
-LABEL = {"红": "red", "黄": "yel", "绿": "grn", "浅蓝": "lblue", "深蓝": "dblue", "蓝": "blue", "黑": "blk"}
+LABEL = {
+    "红": "red",
+    "黄": "yel",
+    "绿": "grn",
+    "浅蓝": "lblue",
+    "深蓝": "dblue",
+    "蓝": "blue",
+    "黑": "blk",
+}
 
 
 def detect(frame, group):
     """检出该组里半径最大的三个目标，返回 (颜色名,cx,cy,r,填充率)"""
-    #救援组是锥体，细高且常被夹爪/反光啃出缺口，实心度到不了 0.85，单独放宽
+    # 救援组是锥体，细高且常被夹爪/反光啃出缺口，实心度到不了 0.85，单独放宽
     finder = ColorFinder(GROUPS[group], allow_tall=(group == "target"))
     roi = ROI_STATE.get(group)
-    groups = finder.find_many(frame, finder.colors, roi=roi)   #一次 HSV 转换扫完
+    groups = finder.find_many(frame, finder.colors, roi=roi)  # 一次 HSV 转换扫完
     cands = []
     for name in finder.colors:
         for cx, cy, r, fill in groups[name]:
@@ -207,31 +231,39 @@ def detect(frame, group):
 
 def is_turntable(frame):
     """看到又大又白、近似圆的转盘就判成救援区（三个圆台只出现在这里）
-       用降采样 + 霍夫圆找大盘面，再确认圆心附近确实是白色，避免误判"""
+    用降采样 + 霍夫圆找大盘面，再确认圆心附近确实是白色，避免误判"""
     small = cv2.resize(frame, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
     gray = cv2.GaussianBlur(cv2.cvtColor(small, cv2.COLOR_BGR2GRAY), (7, 7), 1.5)
-    circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, dp=1.5, minDist=80,
-                               param1=120, param2=60, minRadius=90, maxRadius=320)
+    circles = cv2.HoughCircles(
+        gray,
+        cv2.HOUGH_GRADIENT,
+        dp=1.5,
+        minDist=80,
+        param1=120,
+        param2=60,
+        minRadius=90,
+        maxRadius=320,
+    )
     if circles is None:
         return False
     hsv = cv2.cvtColor(small, cv2.COLOR_BGR2HSV)
     h = small.shape[0]
     for x, y, r in circles[0]:
-        if y < h * 0.25:        #盘心不会在画面最上面
+        if y < h * 0.25:  # 盘心不会在画面最上面
             continue
-        patch = hsv[max(0, int(y) - 6):int(y) + 7, max(0, int(x) - 6):int(x) + 7]
+        patch = hsv[max(0, int(y) - 6) : int(y) + 7, max(0, int(x) - 6) : int(x) + 7]
         if patch.size == 0:
             continue
         _, s, v = patch.reshape(-1, 3).mean(0)
-        if s < 100 and v > 120:     #圆心是白色
+        if s < 100 and v > 120:  # 圆心是白色
             return True
     return False
 
 
 def resolve_auto(frame):
     """自动判区域：先看白色转盘（救援区独有），没有再按三组颜色去比
-       转盘上的圆台比背景杂物大，按“三个目标的半径之和”比大小，
-       只要小球组不比转盘小太多，就优先判成排爆/安置（避免把圆台判成小球）"""
+    转盘上的圆台比背景杂物大，按“三个目标的半径之和”比大小，
+    只要小球组不比转盘小太多，就优先判成排爆/安置（避免把圆台判成小球）"""
     global AUTO_GROUP, _auto_vote, _auto_votes
     if is_turntable(frame):
         pick = "target"
@@ -241,16 +273,16 @@ def resolve_auto(frame):
             c = detect(frame, g)
             if len(c) == 3:
                 rs = [t[3] for t in c]
-                #三个同规格目标在画面里大小应该接近；差距过大多半混进了大块杂物（人腿、桌椅）
+                # 三个同规格目标在画面里大小应该接近；差距过大多半混进了大块杂物（人腿、桌椅）
                 scores[g] = sum(rs) if max(rs) <= 2.0 * min(rs) else -1
             else:
                 scores[g] = -1
         pick = max(scores, key=scores.get)
-        if scores[pick] < 0:        #这一帧哪组都凑不齐三个目标，保持当前判定
+        if scores[pick] < 0:  # 这一帧哪组都凑不齐三个目标，保持当前判定
             _auto_vote = None
             _auto_votes = 0
             return
-        if pick == "target":        #小球组尺寸接近转盘时，优先小球
+        if pick == "target":  # 小球组尺寸接近转盘时，优先小球
             for g in ("bomb", "zone"):
                 if scores[g] >= 0.8 * scores["target"]:
                     pick = g
@@ -260,14 +292,14 @@ def resolve_auto(frame):
     else:
         _auto_vote = pick
         _auto_votes = 1
-    if _auto_votes >= 2 and pick != AUTO_GROUP:   #连续两帧一致才切，防抖
+    if _auto_votes >= 2 and pick != AUTO_GROUP:  # 连续两帧一致才切，防抖
         AUTO_GROUP = pick
         print(f"自动识别区域 -> {pick}", flush=True)
 
 
 def draw(frame, group, ids=None, auto=False):
     """只标半径最大的三个目标，并按二维码结果上色：
-       黄=候选（二维码还没对上），绿=二维码指定的目标，红=其余两个"""
+    黄=候选（二维码还没对上），绿=二维码指定的目标，红=其余两个"""
     roi = ROI_STATE.get(group)
     want = None
     if ids is not None:
@@ -275,42 +307,62 @@ def draw(frame, group, ids=None, auto=False):
     if roi is not None:
         cv2.rectangle(frame, (roi[0], roi[1]), (roi[2], roi[3]), (0, 255, 255), 1)
     cands = detect(frame, group)
-    cands.sort(key=lambda t: t[1])                  #按 cx 从左到右
+    cands.sort(key=lambda t: t[1])  # 按 cx 从左到右
     matched = want if any(c[0] == want for c in cands) else None
     for name, cx, cy, r, _ in cands:
         if matched is None:
-            col = (0, 255, 255)     # 黄：候选
+            col = (0, 255, 255)  # 黄：候选
         elif name == matched:
-            col = (0, 255, 0)       # 绿：二维码指定的目标
+            col = (0, 255, 0)  # 绿：二维码指定的目标
         else:
-            col = (0, 0, 255)       # 红：其余
+            col = (0, 0, 255)  # 红：其余
         cv2.circle(frame, (cx, cy), r, col, 2)
-        patch = cv2.cvtColor(frame[max(0, cy - 2):cy + 3, max(0, cx - 2):cx + 3],
-                             cv2.COLOR_BGR2HSV)     #只转这一小块，省 CPU
+        patch = cv2.cvtColor(
+            frame[max(0, cy - 2) : cy + 3, max(0, cx - 2) : cx + 3], cv2.COLOR_BGR2HSV
+        )  # 只转这一小块，省 CPU
         h, s, v = [int(x) for x in patch.reshape(-1, 3).mean(0)]
-        cv2.putText(frame, f"{LABEL.get(name, name)} r={r} H{h} S{s} V{v}",
-                    (max(5, cx - r), max(20, cy - r - 8)),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, col, 2)
-    tag = "QR:none" if ids is None else f"QR:{''.join(str(i) for i in ids)} target:{LABEL.get(want, want)}"
+        cv2.putText(
+            frame,
+            f"{LABEL.get(name, name)} r={r} H{h} S{s} V{v}",
+            (max(5, cx - r), max(20, cy - r - 8)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            col,
+            2,
+        )
+    tag = (
+        "QR:none"
+        if ids is None
+        else f"QR:{''.join(str(i) for i in ids)} target:{LABEL.get(want, want)}"
+    )
     head = f"auto->{group}" if auto else group
-    cv2.putText(frame, f"{head} found:{len(cands)}  {tag}", (20, 35),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+    cv2.putText(
+        frame,
+        f"{head} found:{len(cands)}  {tag}",
+        (20, 35),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.8,
+        (0, 255, 255),
+        2,
+    )
 
 
 def main():
     idx = CAMERA["index_win"] if sys.platform.startswith("win") else CAMERA["index_linux"]
-    with Camera(index=idx,
-                width=CAMERA["width"],
-                height=CAMERA["height"],
-                fps=CAMERA["fps"],
-                warmup=CAMERA["warmup"],
-                auto_exposure=CAMERA["auto_exposure"],
-                exposure=CAMERA["exposure"],
-                auto_wb=CAMERA["auto_wb"]) as cam:
+    with Camera(
+        index=idx,
+        width=CAMERA["width"],
+        height=CAMERA["height"],
+        fps=CAMERA["fps"],
+        warmup=CAMERA["warmup"],
+        auto_exposure=CAMERA["auto_exposure"],
+        exposure=CAMERA["exposure"],
+        auto_wb=CAMERA["auto_wb"],
+    ) as cam:
         srv = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         print(f"颜色预览已启动: http://<板子IP>:{PORT}/  当前组: {CURRENT}", flush=True)
-        qr = QrReader(slow=False)   #预览不做 3 倍放大兜底，否则 CPU 打满、画面停顿好几秒
+        qr = QrReader(slow=False)  # 预览不做 3 倍放大兜底，否则 CPU 打满、画面停顿好几秒
         ids = None
         n = 0
         t0 = time.time()
@@ -321,23 +373,29 @@ def main():
                 continue
             n += 1
             frames += 1
-            if ids is None and n % 5 == 0:   #二维码只在没锁定时解，锁定后不再占 CPU
+            if ids is None and n % 5 == 0:  # 二维码只在没锁定时解，锁定后不再占 CPU
                 code = qr.feed(frame)
                 if code is not None and ids is None:
                     ids = [int(code[0]), int(code[1]), int(code[2])]
-                    print(f"锁定 QR {code} | 排爆{BOMB_ID[ids[0]]}"
-                          f" | 救援{TARGET_ID[ids[1]]} | 安置{ZONE_ID[ids[2]]}", flush=True)
-            if ids is None and qr.last_box is not None:   #还没锁定时把二维码位置标出来
+                    print(
+                        f"锁定 QR {code} | 排爆{BOMB_ID[ids[0]]}"
+                        f" | 救援{TARGET_ID[ids[1]]} | 安置{ZONE_ID[ids[2]]}",
+                        flush=True,
+                    )
+            if ids is None and qr.last_box is not None:  # 还没锁定时把二维码位置标出来
                 x, y, w, h = qr.last_box
                 cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 128, 0), 2)
             if CURRENT == "auto":
-                if n % 12 == 0:         #每 12 帧判一次区域，其余帧沿用结果，保证画面流畅
+                if n % 12 == 0:  # 每 12 帧判一次区域，其余帧沿用结果，保证画面流畅
                     resolve_auto(frame)
                 draw(frame, AUTO_GROUP, ids, auto=True)
             else:
                 draw(frame, CURRENT, ids)
-            out = frame if (PREVIEW_W, PREVIEW_H) == (frame.shape[1], frame.shape[0]) else \
-                cv2.resize(frame, (PREVIEW_W, PREVIEW_H), interpolation=cv2.INTER_AREA)
+            out = (
+                frame
+                if (PREVIEW_W, PREVIEW_H) == (frame.shape[1], frame.shape[0])
+                else cv2.resize(frame, (PREVIEW_W, PREVIEW_H), interpolation=cv2.INTER_AREA)
+            )
             ok, buf = cv2.imencode(".jpg", out, [cv2.IMWRITE_JPEG_QUALITY, QUALITY])
             if ok:
                 LATEST.put(buf.tobytes())

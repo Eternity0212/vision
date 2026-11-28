@@ -1,7 +1,8 @@
 """二维码预览：一个进程同时做三件事
-   1) 打开摄像头  2) pyzbar 解码并在画面上画框  3) 推 MJPEG 到网页
-   用法：python3 -m tools.qr_preview      （浏览器/OBS 打开 http://<板子IP>:8000/）
-   终端会打印连续 3 帧锁定后的结果"""
+1) 打开摄像头  2) pyzbar 解码并在画面上画框  3) 推 MJPEG 到网页
+用法：python3 -m tools.qr_preview      （浏览器/OBS 打开 http://<板子IP>:8000/）
+终端会打印连续 3 帧锁定后的结果"""
+
 import sys
 import socket
 import threading
@@ -94,10 +95,16 @@ def main():
     idx = CAMERA["index_win"] if sys.platform.startswith("win") else CAMERA["index_linux"]
     min_side = QR["min_side_px"]
 
-    with Camera(index=idx, width=CAMERA["width"], height=CAMERA["height"],
-                fps=CAMERA["fps"], warmup=CAMERA["warmup"],
-                auto_exposure=CAMERA["auto_exposure"], exposure=CAMERA["exposure"],
-                auto_wb=CAMERA["auto_wb"]) as cam:
+    with Camera(
+        index=idx,
+        width=CAMERA["width"],
+        height=CAMERA["height"],
+        fps=CAMERA["fps"],
+        warmup=CAMERA["warmup"],
+        auto_exposure=CAMERA["auto_exposure"],
+        exposure=CAMERA["exposure"],
+        auto_wb=CAMERA["auto_wb"],
+    ) as cam:
         srv = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         print(f"浏览器/OBS 打开： http://{local_ip()}:{PORT}/")
@@ -112,24 +119,40 @@ def main():
                 if frame is None:
                     continue
 
-                code = qr.feed(frame)      # 与主程序同一套识别，含 zxing 小码兜底
+                code = qr.feed(frame)  # 与主程序同一套识别，含 zxing 小码兜底
                 if qr.last_box is not None:
                     x, y, w, h = qr.last_box
                     side = min(w, h)
                     color = (0, 255, 0) if side >= min_side else (0, 200, 255)
                     cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
                     if qr.last_text:
-                        cv2.putText(frame, qr.last_text, (x, max(y - 8, 20)),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+                        cv2.putText(
+                            frame,
+                            qr.last_text,
+                            (x, max(y - 8, 20)),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.8,
+                            color,
+                            2,
+                        )
                 if code is not None and code != locked:
                     locked = code
-                    print(f"锁定 {locked} | 排爆{BOMB_ID[int(locked[0])]}"
-                          f" | 救援{TARGET_ID[int(locked[1])]}"
-                          f" | 安置{ZONE_ID[int(locked[2])]}")
+                    print(
+                        f"锁定 {locked} | 排爆{BOMB_ID[int(locked[0])]}"
+                        f" | 救援{TARGET_ID[int(locked[1])]}"
+                        f" | 安置{ZONE_ID[int(locked[2])]}"
+                    )
 
                 status = "未锁定" if locked is None else f"已锁定 {locked}"
-                cv2.putText(frame, f"{status}  hit:{qr.hits}", (20, 40),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+                cv2.putText(
+                    frame,
+                    f"{status}  hit:{qr.hits}",
+                    (20, 40),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.9,
+                    (0, 255, 0),
+                    2,
+                )
 
                 ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, QUALITY])
                 if ok:

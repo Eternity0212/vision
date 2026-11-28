@@ -1,5 +1,6 @@
 """摄像头 MJPEG 推流：浏览器或 OBS 打开 http://<板子IP>:8000/ 就能看到实时画面
-   用法：python3 -m tools.stream        （Ctrl+C 退出）"""
+用法：python3 -m tools.stream        （Ctrl+C 退出）"""
+
 import sys
 import socket
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -68,10 +69,16 @@ def local_ip():
 
 def main():
     idx = CAMERA["index_win"] if sys.platform.startswith("win") else CAMERA["index_linux"]
-    with Camera(index=idx, width=CAMERA["width"], height=CAMERA["height"],
-                fps=CAMERA["fps"], warmup=CAMERA["warmup"],
-                auto_exposure=CAMERA["auto_exposure"], exposure=CAMERA["exposure"],
-                auto_wb=CAMERA["auto_wb"]) as cam:
+    with Camera(
+        index=idx,
+        width=CAMERA["width"],
+        height=CAMERA["height"],
+        fps=CAMERA["fps"],
+        warmup=CAMERA["warmup"],
+        auto_exposure=CAMERA["auto_exposure"],
+        exposure=CAMERA["exposure"],
+        auto_wb=CAMERA["auto_wb"],
+    ) as cam:
         Handler.cam = cam
         srv = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
         print(f"浏览器/OBS 打开： http://{local_ip()}:{PORT}/")

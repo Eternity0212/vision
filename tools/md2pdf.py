@@ -7,6 +7,7 @@
 支持: #/##/### 标题、段落、有序/无序列表、> 引用、``` 代码块、| 表格 |、--- 分隔线
 页脚版本号自动读取 Markdown 头部的「版本：vX.Y」。
 """
+
 import os
 import re
 import sys
@@ -20,7 +21,7 @@ BODY_W = PAGE_W - ML - MR
 
 FONT = "WenQuanYi Zen Hei"
 MONO = "DejaVu Sans Mono"
-VERSION = "v1.x"          # 由 Markdown 头部「版本：」覆盖
+VERSION = "v1.x"  # 由 Markdown 头部「版本：」覆盖
 
 BODY = 9.5
 SMALL = 9.2
@@ -228,8 +229,15 @@ class Doc:
         widths = [BODY_W * w / total for w in weights]
 
         def cells_of(row, bold):
-            return [self.wrap((row[c] if c < len(row) else "").replace("**", ""),
-                              widths[c] - 2 * pad, size, bold=bold) for c in range(ncol)]
+            return [
+                self.wrap(
+                    (row[c] if c < len(row) else "").replace("**", ""),
+                    widths[c] - 2 * pad,
+                    size,
+                    bold=bold,
+                )
+                for c in range(ncol)
+            ]
 
         for ri, row in enumerate(rows):
             header = ri == 0
@@ -238,10 +246,11 @@ class Doc:
             if self.y + h > PAGE_H - MB:
                 self.footer()
                 self.new_page()
-                if not header:      # 跨页重复表头
+                if not header:  # 跨页重复表头
                     hc = cells_of(rows[0], True)
-                    self._draw_row(hc, widths, max(len(x) for x in hc) * lh + pad,
-                                   size, lh, pad, True)
+                    self._draw_row(
+                        hc, widths, max(len(x) for x in hc) * lh + pad, size, lh, pad, True
+                    )
                     cells = cells_of(row, False)
                     h = max(len(x) for x in cells) * lh + pad
             self._draw_row(cells, widths, h, size, lh, pad, header)
@@ -357,8 +366,12 @@ def main(src, dst):
         i += 1
         while i < len(lines):
             nxt = lines[i].strip()
-            if (not nxt or nxt.startswith(("#", "|", ">", "```", "- "))
-                    or nxt == "---" or re.match(r"^\d+\.\s", nxt)):
+            if (
+                not nxt
+                or nxt.startswith(("#", "|", ">", "```", "- "))
+                or nxt == "---"
+                or re.match(r"^\d+\.\s", nxt)
+            ):
                 break
             buf.append(inline(nxt))
             i += 1
