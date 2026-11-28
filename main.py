@@ -8,10 +8,8 @@ from config.config import (
     BOMB_ID,
     TARGET_ID,
     ZONE_ID,
-    BOMB_HSV,
     TARGET_HSV,
     ZONE_HSV,
-    BOMB_ROI,
     TARGET_ROI,
     ZONE_ROI,
     STOP,
@@ -28,9 +26,9 @@ HEADLESS = sys.platform.startswith("linux") and os.environ.get("DISPLAY") is Non
 IDX = CAMERA["index_win"] if sys.platform.startswith("win") else CAMERA["index_linux"]
 
 MODE_CLOSED = 0  # 循迹/发车，闭眼，只发 R
-MODE_P3 = 1  # 排爆区：判居中发 K，停稳后报 Q,n
+MODE_BOMB = 1  # 防爆区：由 main_arm.py 负责，本文件收到就忽略
 MODE_P4 = 2  # 转盘：量偏差发 O,±d，守坑位发 G
-MODE_P5 = 3  # 安置区：与 p3 同一套，判中间球居中发 K，停稳后报指定色球 Q,n
+MODE_P5 = 3  # 安置区：判中间球居中发 K，停稳后报指定色球 Q,n
 
 # 车前进方向与 off_cm 的对应：直接由 POS_LEFT_IS 推导，不单独配置，避免两个符号参数互相矛盾
 # 画面左=车尾(POS_LEFT_IS=1)  → 盘心偏画面右说明车还没走到 → 前进
@@ -50,7 +48,7 @@ COLOR_EN = {
 
 
 def find_targets(finder, frame, want=3, names=None, roi=None):
-    """三个目标颜色随机（p3、p4 都是）：扫指定颜色做候选，去重后取半径最大的 want 个"""
+    """三个目标颜色随机（p4、p5 都是）：扫指定颜色做候选，去重后取半径最大的 want 个"""
     names = finder.colors if names is None else list(names)
     groups = finder.find_many(frame, names, roi=roi)  # 一次 HSV 转换扫完所有颜色
     cands = []
@@ -93,7 +91,6 @@ def pos_number(idx):
 
 def main():
     qr = QrReader()
-    bomb_finder = ColorFinder(BOMB_HSV)  # 排爆物颜色
     target_finder = ColorFinder(TARGET_HSV, allow_tall=True)  # 转盘救援目标：锥体细高，放宽实心度
     zone_finder = ColorFinder(ZONE_HSV)  # 安置区小球颜色
     m = Measure()
@@ -104,7 +101,6 @@ def main():
     mode = MODE_CLOSED  # 由电控下发切换
     last_data = time.time()  # 上次发出周期报文的时刻
 
-    p3 = {"centered": 0, "stopped": False, "q_sent": False}
     p4 = {
         "adjusted": 0,
         "settled": False,
@@ -114,9 +110,6 @@ def main():
         "g_stable": 0,
     }
     p5 = {"centered": 0, "stopped": False, "q_sent": False}
-
-    def reset_p3():
-        p3.update(centered=0, stopped=False, q_sent=False)
 
     def reset_p4():
         p4.update(adjusted=0, settled=False, last_o=0.0, last_g=0.0, g_cx=None, g_stable=0)
@@ -147,10 +140,11 @@ def main():
                         new_mode = int(cmd.split(",")[1])
                     except (ValueError, IndexError):
                         new_mode = mode
-                    if new_mode in (MODE_CLOSED, MODE_P3, MODE_P4, MODE_P5) and new_mode != mode:
+                    if new_mode == MODE_BOMB:
+                        print("M,1 属于防爆区，请运行 main_arm.py；本程序忽略")
+                    elif new_mode in (MODE_CLOSED, MODE_P4, MODE_P5) and new_mode != mode:
                         mode = new_mode
-                        reset_p3()  # 换阶段，判据全部重来
-                        reset_p4()
+                        reset_p4()  # 换阶段，判据全部重来
                         reset_p5()
                         print(f"切换阶段 -> {mode}")
 
@@ -163,59 +157,6 @@ def main():
                             colors = [BOMB_ID[ids[0]], TARGET_ID[ids[1]], ZONE_ID[ids[2]]]
                             tx.send_now(f"T,{ids[0]},{ids[1]},{ids[2]}")
                             print(f"锁定 {code} -> 排爆{colors[0]} 救援{colors[1]} 安置{colors[2]}")
-
-                elif mode == MODE_P3:
-                    # 排爆区：先判居中发 K，停稳后报目标色在第几号位
-                    items = find_targets(bomb_finder, frame, names=BOMB_ID.values(), roi=BOMB_ROI)
-                    if items is None:
-                        p3["centered"] = 0  # 少一个球就不判，连计数清零
-                    else:
-                        mid = items[1]  # 按 cx 排序取中间那颗 = 2 号位球
-                        ang = m.angle(mid[0])
-                        if not p3["stopped"]:
-                            if abs(ang) < STOP["center_deg"]:
-                                p3["centered"] += 1
-                                if p3["centered"] >= STOP["lock_frames"]:
-                                    tx.send_now("K")
-                                    p3["stopped"] = True
-                                    print("中间球居中 -> 发 K")
-                            else:
-                                p3["centered"] = 0
-                        elif not p3["q_sent"]:
-                            # 二维码指定的排爆色单独找一次，再用它和最接近的候选对位置
-                            target = bomb_finder.find(frame, colors[0], roi=BOMB_ROI)
-                            if target is not None:
-                                best = min(
-                                    range(len(items)), key=lambda i: abs(items[i][0] - target[0])
-                                )
-                                gap = (items[2][0] - items[0][0]) / 2.0  # 三球跨度的一半
-                                if abs(items[best][0] - target[0]) <= gap:  # 目标球真在候选里
-                                    pos = pos_number(best)
-                                    tx.send_now(f"Q,{pos}")
-                                    p3["q_sent"] = True
-                                    print(f"{colors[0]} 在 {pos} 号位 -> 发 Q,{pos}")
-                        if not HEADLESS:
-                            cols = box_colors(bomb_finder, frame, items, colors[0], BOMB_ROI)
-                            for i, it in enumerate(items):
-                                cv2.circle(frame, (it[0], it[1]), it[2], cols[i], 2)
-                                cv2.putText(
-                                    frame,
-                                    str(pos_number(i)),
-                                    (it[0] - 8, it[1] - it[2] - 6),
-                                    cv2.FONT_HERSHEY_SIMPLEX,
-                                    0.7,
-                                    cols[i],
-                                    2,
-                                )
-                            cv2.putText(
-                                frame,
-                                f"K:{p3['stopped']} Q:{p3['q_sent']} tgt:{COLOR_EN.get(colors[0], colors[0])}",
-                                (20, 40),
-                                cv2.FONT_HERSHEY_SIMPLEX,
-                                0.8,
-                                (0, 255, 0),
-                                2,
-                            )
 
                 elif mode == MODE_P4:
                     # 转盘：三目标取平均 cx = 盘心投影；先精调，再守坑位
@@ -290,7 +231,7 @@ def main():
                             )
 
                 elif mode == MODE_P5:
-                    # 安置区：与 p3 同一套，先判中间球居中发 K，停稳后再报指定色球在几号位
+                    # 安置区：先判中间球居中发 K，停稳后再报指定色球在几号位
                     items = find_targets(zone_finder, frame, names=ZONE_ID.values(), roi=ZONE_ROI)
                     if items is None:
                         p5["centered"] = 0  # 少一个球就不判，连计数清零
